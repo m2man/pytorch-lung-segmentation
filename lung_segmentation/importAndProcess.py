@@ -62,6 +62,7 @@ class visualize(object):
         else:
             plt.show()
 
+
     def save_for_preprocessing(self, idx, filename, mask, out_dir):
         background = np.asarray(self.sample[idx]['image'])
         filter = np.asarray(np.argmax(mask, axis=0))
@@ -69,6 +70,7 @@ class visualize(object):
         filter = np.stack((filter, filter, filter))
         filtered = torch.Tensor(background * filter)
         save_image(filtered, os.path.join(out_dir, "{}.png".format(os.path.splitext(os.path.basename(filename))[0])))
+
 
 
 class lungSegmentDataset(Dataset):
@@ -136,6 +138,33 @@ class LungTest(Dataset):
 
     def __getitem__(self, idx):
         img_name = os.path.join(self.image_path,self.list[idx])
+        img = Image.open(img_name).convert(self.convert_to)
+        if self.imgtransform:
+            img = self.imgtransform(img)
+        return {'image': img, 'filename': self.list[idx]}
+
+
+class MyLungTest(Dataset):
+    def __init__(self, image_dir, image_path_txt, imgtransform, convert_to):
+        self.image_dir = image_dir
+        if self.image_dir[-1] != '/':
+            self.image_dir += '/'
+        self.image_path_txt = image_path_txt
+        self.imgtransform = imgtransform
+        assert convert_to in ['RGB', 'L']
+        self.convert_to = convert_to
+        self.list = []
+        f_file = open(self.image_path_txt, 'r')
+        for line in f_file:
+            name = line.replace('\n', '')
+            name = name.split()[0] # dont take the label, only take the path
+            self.list.append(name)
+
+    def __len__(self):
+        return len(self.list)
+
+    def __getitem__(self, idx):
+        img_name = self.image_dir + self.list[idx]
         img = Image.open(img_name).convert(self.convert_to)
         if self.imgtransform:
             img = self.imgtransform(img)

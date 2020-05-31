@@ -1,14 +1,24 @@
 import argparse
 import os
-
+from PIL import Image
 import numpy as np
 import torch
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 
-import lung_segmentation.importAndProcess as iap
-from models import model
-from models.unet_models import unet11, unet16
+# import lung_segmentation.importAndProcess as iap
+import importAndProcess as iap
+from ..models import model as model
+from ..models.unet_models import unet11, unet16
 
+def save_mask(mask, out_dir, filename):
+    filter = np.asarray(np.argmax(mask, axis=0))
+    filter = (filter > 0).astype('uint8')
+    filter = filter*255
+    filter = np.stack((filter, filter, filter))
+    pil = Image.fromarray(filter)
+    pil = pil.save(f"{out_dir}/{filename}")
+
+OUTDIR = '/home/dxtien/dxtien_research/COVID/CXR8_Segmentation'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('img_path')
@@ -43,7 +53,8 @@ convert_to = 'RGB'
 if args.input_type == 'dicom':
     dataset = iap.DicomSegment(args.img_path, transforms, convert_to)
 elif args.input_type == 'png' and args.non_montgomery:
-    dataset = iap.LungTest(args.img_path, transforms, convert_to)
+    #dataset = iap.LungTest(args.img_path, transforms, convert_to)
+    dataset = iap.MyLungTest(args.img_path, transforms, convert_to)
 elif args.input_type == 'png':
     dataset = iap.lungSegmentDataset(
         os.path.join(args.img_path, "CXR_png"),
@@ -53,17 +64,23 @@ elif args.input_type == 'png':
         labeltransform=Compose([Resize((224, 224)),ToTensor()]),
         convert_to='RGB',
     )
+
 dataloader = torch.utils.data.DataLoader(dataset,batch_size=1,shuffle=False)
 
 model = torch.nn.DataParallel(model)
 model.load_state_dict(torch.load(args.resume_from))
-show = iap.visualize(dataset)
+#show = iap.visualize(dataset)
 
 with torch.no_grad():
     for i, sample in enumerate(dataloader):
         img = torch.autograd.Variable(sample['image']).cuda()
         mask = model(img)
-        if not args.non_montgomery:
-            show.ImageWithGround(i,True,True,save=True)
+        # if not args.non_montgomery:
+        #     show.ImageWithGround(i,True,True,save=True)
 
-        show.ImageWithMask(i, sample['filename'][0], mask.squeeze().cpu().numpy(), True, True, save=True)
+        # show.ImageWithMask(i, sample['filename'][0], mask.squeeze().cpu().numpy(), True, True, save=True)
+        mask_np = mask.squeeze().cpu().numpy()
+        filename = sample['filename']
+        filename = filename.split('/')[-1]
+        filename = filename[:-4]
+        save_mask(mask_np, OUTDIR, filename=filename+'_mask.png')
